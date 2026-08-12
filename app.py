@@ -47,9 +47,9 @@ st.sidebar.subheader("🎯 Detection & Accuracy Controls")
 model_choice = st.sidebar.selectbox(
     "YOLO Model Preset",
     options=[
-        "yolov8s.pt (Recommended - High Accuracy)",
-        "yolov8m.pt (Maximum Accuracy - Slower)",
-        "yolov8n.pt (Ultra Fast - Lower Accuracy)"
+        "yolov8m.pt (Recommended — Maximum Classroom Accuracy)",
+        "yolov8s.pt (Fast — Good Accuracy)",
+        "yolov8n.pt (Ultra Fast — Lower Accuracy)"
     ],
     index=0
 )
@@ -59,7 +59,7 @@ resolution_choice = st.sidebar.selectbox(
     "Scanning Resolution",
     options=[
         "1280 (Ultra-Res — Maximum Coverage)",
-        "1024 (High-Res — Fast + Good Coverage)",
+        "1024 (High-Res — Good Coverage)",
         "640 (Standard — Fastest)"
     ],
     index=0
@@ -67,9 +67,9 @@ resolution_choice = st.sidebar.selectbox(
 imgsz = int(resolution_choice.split()[0])
 
 conf_thresh = st.sidebar.slider(
-    "Detection Confidence Threshold", 0.05, 0.80, 0.12, 0.01,
+    "Detection Confidence Threshold", 0.05, 0.80, 0.10, 0.01,
     help="Lower = catches more people (including partially hidden). "
-         "Try 0.08–0.15 for crowded classrooms."
+         "Try 0.08–0.12 for crowded classrooms."
 )
 
 line_pos = st.sidebar.slider(
