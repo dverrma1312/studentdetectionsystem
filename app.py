@@ -67,7 +67,7 @@ resolution_choice = st.sidebar.selectbox(
 imgsz = int(resolution_choice.split()[0])
 
 conf_thresh = st.sidebar.slider(
-    "Detection Confidence Threshold", 0.05, 0.80, 0.10, 0.01,
+    "Detection Confidence Threshold", 0.05, 0.80, 0.08, 0.01,
     help="Lower = catches more people (including partially hidden). "
          "Try 0.08–0.12 for crowded classrooms."
 )
