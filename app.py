@@ -64,13 +64,22 @@ st.sidebar.subheader("🎯 Detection & Accuracy Controls")
 
 model_choice = st.sidebar.selectbox(
     "YOLO Model Preset",
-    options=["yolov8s.pt (Recommended - High Classroom Accuracy)", "yolov8n.pt (Ultra Fast - Lower Accuracy)", "yolov8m.pt (Maximum Accuracy)"],
+    options=["yolov8s.pt (Recommended - High Classroom Accuracy)", "yolov8m.pt (Maximum Classroom Accuracy)", "yolov8n.pt (Ultra Fast)"],
     index=0
 )
 model_name = model_choice.split()[0]
 
-conf_thresh = st.sidebar.slider("Detection Confidence Threshold", 0.10, 0.90, 0.20, 0.05, 
-                                help="Lower threshold (e.g. 0.15 - 0.25) catches partially hidden/seated students behind desks.")
+resolution_choice = st.sidebar.selectbox(
+    "Scanning Resolution (detects small/far people)",
+    options=["1024 (High-Res - Full Classroom Coverage)", "1280 (Ultra-Res - Maximum Detail)", "640 (Standard)"],
+    index=0
+)
+imgsz = int(resolution_choice.split()[0])
+
+conf_thresh = st.sidebar.slider(
+    "Detection Confidence Threshold", 0.05, 0.80, 0.15, 0.05, 
+    help="Lower threshold (0.10 - 0.20) detects students sitting in the back rows and left desks."
+)
 
 line_pos = st.sidebar.slider("Entry/Exit Boundary Line Position", 0.10, 0.90, 0.50, 0.05)
 frame_sample_rate = st.sidebar.slider("Frame Sampling (Process 1 in N frames)", 1, 5, 1)
@@ -88,7 +97,8 @@ run_pipeline = st.sidebar.button("▶️ Start / Restart Live Stream", type="pri
 engine = CampusAnalyticsEngine(
     model_name=model_name,
     conf_threshold=conf_thresh,
-    line_position_ratio=line_pos
+    line_position_ratio=line_pos,
+    imgsz=imgsz
 )
 
 # UI Layout (Video Player on left, Telemetry on right)

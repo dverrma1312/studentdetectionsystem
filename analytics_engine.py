@@ -7,12 +7,13 @@ from ultralytics import YOLO
 class CampusAnalyticsEngine:
     def __init__(
         self,
-        model_name="yolov8s.pt",  # Upgraded to yolov8s for much higher classroom detection accuracy
-        conf_threshold=0.20,       # Lowered default threshold from 0.35 to 0.20 for seated/occluded students
+        model_name="yolov8s.pt",
+        conf_threshold=0.15,       # Lowered default threshold to catch occluded students on left/back
         blur_threshold=70.0,
         motion_threshold=0.015,
         light_threshold=140.0,
-        line_position_ratio=0.5
+        line_position_ratio=0.5,
+        imgsz=1024                # High-res inference to detect small/far people on left & back rows
     ):
         """
         Campus Intelligence Analytics Engine.
@@ -21,6 +22,7 @@ class CampusAnalyticsEngine:
         # Load YOLO model
         self.model = YOLO(model_name)
         self.conf_threshold = conf_threshold
+        self.imgsz = imgsz
         
         # Thresholds
         self.blur_threshold = blur_threshold
@@ -30,7 +32,7 @@ class CampusAnalyticsEngine:
         
         # State variables
         self.prev_gray = None
-        self.total_unique_entries = 0
+        self.all_seen_track_ids = set() # Set of all unique person IDs ever seen
         self.active_tracks = {} # track_id -> {'last_y': float, 'state': 'outside'/'inside'}
         self.track_history = defaultdict(list) # track_id -> list of centroids (x,y)
         self.track_postures = {} # track_id -> 'Seated' / 'Standing/Moving'
@@ -101,7 +103,7 @@ class CampusAnalyticsEngine:
             return True, "Alert: Lights ON in Empty Room!"
         return False, "Normal (Empty & Off)"
 
-    def _assign_fallback_ids(self, centroids, max_distance=70):
+    def _assign_fallback_ids(self, centroids, max_distance=80):
         """
         Centroid distance matching fallback if ByteTrack is unavailable.
         """
@@ -129,7 +131,7 @@ class CampusAnalyticsEngine:
 
     def process_frame(self, frame):
         """
-        Main pipeline function with improved classroom person detection & posture classification.
+        Main pipeline function with high-res full frame coverage (left, right, front, back).
         """
         h, w = frame.shape[:2]
         crossing_y = int(h * self.line_position_ratio)
@@ -140,7 +142,7 @@ class CampusAnalyticsEngine:
         # 2. Motion check
         motion_status, motion_ratio = self.detect_motion(frame)
         
-        # 3. YOLO Tracking / Detection (Optimized for classroom crowd)
+        # 3. High-Resolution YOLO Tracking (imgsz=1024 to catch left & back rows)
         annotated_frame = frame.copy()
         current_tracked_ids = set()
         seated_count = 0
@@ -151,6 +153,7 @@ class CampusAnalyticsEngine:
                 source=frame,
                 classes=[0],  # Person class
                 conf=self.conf_threshold,
+                imgsz=self.imgsz,
                 persist=True,
                 verbose=False
             )
@@ -159,6 +162,7 @@ class CampusAnalyticsEngine:
                 source=frame,
                 classes=[0],
                 conf=self.conf_threshold,
+                imgsz=self.imgsz,
                 verbose=False
             )
         
@@ -177,6 +181,8 @@ class CampusAnalyticsEngine:
                     
                 for box, (center_x, center_y), track_id in zip(xyxy_boxes, centroids, track_ids):
                     current_tracked_ids.add(track_id)
+                    self.all_seen_track_ids.add(track_id)
+                    
                     x1, y1, x2, y2 = map(int, box)
                     box_w = max(x2 - x1, 1)
                     box_h = max(y2 - y1, 1)
@@ -186,7 +192,7 @@ class CampusAnalyticsEngine:
                     if len(self.track_history[track_id]) > 20:
                         self.track_history[track_id].pop(0)
                         
-                    # Calculate movement velocity over recent frames
+                    # Calculate movement velocity over history
                     history = self.track_history[track_id]
                     if len(history) >= 5:
                         dx = history[-1][0] - history[0][0]
@@ -195,22 +201,21 @@ class CampusAnalyticsEngine:
                     else:
                         velocity = 0.0
                         
-                    # Enhanced Posture Classification Heuristic:
-                    # Seated students stay mostly stationary (low velocity < 12.0)
-                    # or have wider/squarish aspect ratio (height/width < 1.8).
+                    # Posture Heuristic:
+                    # Low movement (velocity < 15) OR low aspect ratio -> Seated
                     aspect_ratio = box_h / box_w
-                    if velocity < 12.0 or aspect_ratio < 1.4:
+                    if velocity < 15.0 or aspect_ratio < 1.7:
                         posture = "Seated"
                         seated_count += 1
-                        box_color = (255, 191, 0) # Deep Cyan / Amber
+                        box_color = (255, 191, 0) # Amber / Cyan
                     else:
                         posture = "Standing/Moving"
                         standing_count += 1
-                        box_color = (0, 255, 127) # Neon Green
+                        box_color = (0, 255, 127) # Neon green
                         
                     self.track_postures[track_id] = posture
                     
-                    # Line Crossing Logic:
+                    # Line Crossing Event Detection:
                     if track_id not in self.active_tracks:
                         initial_state = "inside" if center_y > crossing_y else "outside"
                         self.active_tracks[track_id] = {
@@ -221,7 +226,6 @@ class CampusAnalyticsEngine:
                         prev_state = self.active_tracks[track_id]['state']
                         if prev_state == "outside" and center_y >= crossing_y:
                             self.active_tracks[track_id]['state'] = "inside"
-                            self.total_unique_entries += 1
                             self._log_event(f"Entry detected (Person #{track_id})")
                         elif prev_state == "inside" and center_y < crossing_y:
                             self.active_tracks[track_id]['state'] = "outside"
@@ -233,23 +237,24 @@ class CampusAnalyticsEngine:
                     cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), box_color, 2)
                     label = f"ID:#{track_id} | {posture}"
                     
-                    (w_lbl, h_lbl), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
-                    cv2.rectangle(annotated_frame, (x1, y1 - 22), (x1 + w_lbl, y1), box_color, -1)
-                    cv2.putText(annotated_frame, label, (x1, y1 - 6),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
+                    (w_lbl, h_lbl), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
+                    cv2.rectangle(annotated_frame, (x1, y1 - 20), (x1 + w_lbl, y1), box_color, -1)
+                    cv2.putText(annotated_frame, label, (x1, y1 - 5),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 0), 1)
                     
-                    cv2.circle(annotated_frame, (center_x, center_y), 4, (0, 0, 255), -1)
+                    cv2.circle(annotated_frame, (center_x, center_y), 3, (0, 0, 255), -1)
 
-        # Count currently present inside room
-        currently_present = sum(
-            1 for tid, data in self.active_tracks.items()
-            if tid in current_tracked_ids and data['state'] == "inside"
-        )
+        # Attendance Metrics:
+        # Currently Present = Total active people detected in the room right now
+        currently_present = len(current_tracked_ids)
+        
+        # Total Unique Entries = All unique track IDs registered so far
+        total_unique_entries = len(self.all_seen_track_ids)
         
         # Room Occupancy Status
         occupancy_status = "Occupied" if currently_present > 0 else "Empty"
         
-        # 6. Wasted Utility Alert Check
+        # Wasted Utility Alert Check
         wasted_flag, utility_msg = self.check_wasted_utility(frame, currently_present)
         if wasted_flag and "Lights ON" not in self.last_event:
             self._log_event("UTILITY ALERT: Lights left ON in empty room!")
@@ -262,7 +267,7 @@ class CampusAnalyticsEngine:
         # Telemetry payload
         telemetry = {
             "currently_present": currently_present,
-            "total_unique_entries": self.total_unique_entries,
+            "total_unique_entries": total_unique_entries,
             "seated_count": seated_count,
             "standing_count": standing_count,
             "blur_value": round(blur_val, 1),
