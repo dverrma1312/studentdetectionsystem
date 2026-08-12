@@ -47,9 +47,9 @@ st.sidebar.subheader("🎯 Detection & Accuracy Controls")
 model_choice = st.sidebar.selectbox(
     "YOLO Model Preset",
     options=[
-        "yolov8m.pt (Recommended — Maximum Classroom Accuracy)",
-        "yolov8s.pt (Fast — Good Accuracy)",
-        "yolov8n.pt (Ultra Fast — Lower Accuracy)"
+        "yolov8s.pt (Recommended — Fast + Accurate)",
+        "yolov8n.pt (Ultra Fast)",
+        "yolov8m.pt (Maximum Accuracy — Slower)"
     ],
     index=0
 )
@@ -58,9 +58,9 @@ model_name = model_choice.split()[0]
 resolution_choice = st.sidebar.selectbox(
     "Scanning Resolution",
     options=[
-        "1280 (Ultra-Res — Maximum Coverage)",
-        "1024 (High-Res — Good Coverage)",
-        "640 (Standard — Fastest)"
+        "640 (Standard — Fast & Smooth)",
+        "1024 (High-Res — More Detail)",
+        "1280 (Ultra-Res — Slower)"
     ],
     index=0
 )
@@ -77,7 +77,8 @@ line_pos = st.sidebar.slider(
     help="Vertical line on the LEFT side simulating a doorway."
 )
 
-frame_sample_rate = st.sidebar.slider("Frame Sampling (Process 1 in N frames)", 1, 5, 1)
+frame_sample_rate = st.sidebar.slider("Frame Sampling (Process 1 in N frames)", 1, 5, 2,
+                                      help="2 = smooth playback, 1 = maximum accuracy but slower")
 
 # File uploader
 uploaded_file = None
