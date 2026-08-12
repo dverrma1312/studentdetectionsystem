@@ -13,7 +13,8 @@ class CampusAnalyticsEngine:
         motion_threshold=0.015,
         light_threshold=140.0,
         line_position_ratio=0.5,
-        imgsz=1024                # High-res inference to detect small/far people on left & back rows
+        imgsz=1024,
+        **kwargs
     ):
         """
         Campus Intelligence Analytics Engine.
