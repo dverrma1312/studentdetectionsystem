@@ -3,7 +3,7 @@ import numpy as np
 import time
 import os
 from collections import defaultdict
-from ultralytics import YOLO
+from person_detector import PersonDetector
 
 class CampusAnalyticsEngine:
     def __init__(
@@ -14,19 +14,19 @@ class CampusAnalyticsEngine:
         motion_threshold=0.015,
         light_threshold=140.0,
         line_position_ratio=0.15,
-        imgsz=640,
-        **kwargs
+        imgsz=640
     ):
-        self.model = YOLO(model_name)
+        # Dedicated hardware-accelerated detector wrapper
+        self.detector = PersonDetector(model_name)
+        
         self.conf_threshold = conf_threshold
         self.imgsz = imgsz
-
         self.blur_threshold = blur_threshold
         self.motion_threshold = motion_threshold
         self.light_threshold = light_threshold
         self.line_position_ratio = line_position_ratio
 
-        # Load Haar cascades as safety fallbacks
+        # Load Haar cascades for small/far head fallbacks
         script_dir = os.path.dirname(os.path.abspath(__file__))
         haar_dir = os.path.join(script_dir, "haar_models")
         self.upper_cascade = None
@@ -44,10 +44,11 @@ class CampusAnalyticsEngine:
                 except Exception:
                     pass
 
-        # State variables for Temporal Tracking (Inference skipping to prevent CPU lag)
+        # Frame rate pacing
         self.frame_counter = 0
-        self.last_yolo_boxes = [] # Stores last detected boxes: [[x1, y1, x2, y2, track_id]]
-        
+        self.last_yolo_boxes = []
+
+        # Tracking state
         self.prev_gray = None
         self.all_seen_track_ids = set()
         self.active_tracks = {}
@@ -57,6 +58,7 @@ class CampusAnalyticsEngine:
         self.next_fallback_id = 1
         self.prev_centroids = {}
 
+        # Log
         self.event_log = []
         self.last_event = "System initialized"
 
@@ -111,21 +113,11 @@ class CampusAnalyticsEngine:
         return assigned
 
     def _sharpen_blurry_frame(self, frame):
-        """
-        Applies unsharp masking and 2D sharpening kernel to restore edges on blurry feeds.
-        """
-        # 1. Boost local contrast using CLAHE
         lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
         l, a, b = cv2.split(lab)
         l = cv2.createCLAHE(clipLimit=3.5, tileGridSize=(8, 8)).apply(l)
         enhanced = cv2.cvtColor(cv2.merge([l, a, b]), cv2.COLOR_LAB2BGR)
-        
-        # 2. Sharpening filter to restore details lost due to lens blur
-        kernel = np.array([
-            [0, -1, 0],
-            [-1, 5, -1],
-            [0, -1, 0]
-        ], dtype=np.float32)
+        kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], dtype=np.float32)
         return cv2.filter2D(enhanced, -1, kernel)
 
     def _box_overlaps_any(self, box, existing_boxes, iou_thresh=0.2):
@@ -176,44 +168,44 @@ class CampusAnalyticsEngine:
         crossing_x = int(w * self.line_position_ratio)
         self.frame_counter += 1
 
-        # 1. Quality & Motion Check
         blur_val, blur_status = self.check_blur(frame)
         motion_status, _ = self.detect_motion(frame)
 
-        # Apply sharpening pre-processing if frame is blurry or poor-quality
+        # Apply sharpening deblurring filter
         preprocessed = self._sharpen_blurry_frame(frame)
 
-        # ─── HYBRID TEMPORAL PIPELINE: YOLO every 4 frames, Tracking fallback in-between ───
-        run_yolo = (self.frame_counter % 4 == 0) or (len(self.last_yolo_boxes) == 0)
+        # Interleave inference (process every 4th frame through YOLO to save CPU/metal bandwidth)
+        run_detector = (self.frame_counter % 4 == 0) or (len(self.last_yolo_boxes) == 0)
         
         merged_boxes = []
         merged_tids = []
+        keypoints_list = [] # Used if model returns poses
 
-        if run_yolo:
-            # Run fast YOLO inference
-            try:
-                results = self.model.track(
-                    source=preprocessed, classes=[0], conf=self.conf_threshold,
-                    iou=0.3, imgsz=self.imgsz, max_det=50, persist=True, verbose=False
-                )
-            except Exception:
-                results = self.model(
-                    source=preprocessed, classes=[0], conf=self.conf_threshold,
-                    iou=0.3, imgsz=self.imgsz, max_det=50, verbose=False
-                )
+        if run_detector:
+            # Predict using our custom MPS hardware-accelerated wrapper
+            results = self.detector.predict(preprocessed, conf=self.conf_threshold, imgsz=self.imgsz)
 
             yolo_boxes = []
             yolo_tids = []
+            
             if results and results[0].boxes is not None and len(results[0].boxes) > 0:
                 boxes_obj = results[0].boxes
                 yolo_boxes = boxes_obj.xyxy.cpu().numpy().tolist()
+                
+                # Check for Pose keypoints (17 keypoints: knees, hips, shoulders)
+                if results[0].keypoints is not None and len(results[0].keypoints) > 0:
+                    try:
+                        keypoints_list = results[0].keypoints.xy.cpu().numpy().tolist()
+                    except Exception:
+                        pass
+                
                 if boxes_obj.id is not None:
                     yolo_tids = boxes_obj.id.int().cpu().tolist()
                 else:
                     cents = [((b[0]+b[2])/2, (b[1]+b[3])/2) for b in yolo_boxes]
                     yolo_tids = self._assign_fallback_ids(cents)
 
-            # Supplement with Haar Cascades
+            # Suppement with Haar Cascades
             gray = cv2.cvtColor(preprocessed, cv2.COLOR_BGR2GRAY)
             haar_extra = self._detect_missed_people(gray, yolo_boxes)
             haar_tids = []
@@ -221,7 +213,6 @@ class CampusAnalyticsEngine:
                 haar_cents = [((b[0]+b[2])//2, (b[1]+b[3])//2) for b in haar_extra]
                 haar_tids = self._assign_fallback_ids(haar_cents)
 
-            # Store in memory for next frames
             merged_boxes = yolo_boxes + haar_extra
             merged_tids = yolo_tids + haar_tids
             
@@ -230,16 +221,13 @@ class CampusAnalyticsEngine:
             for box, tid in zip(merged_boxes, merged_tids):
                 self.last_yolo_boxes.append((box[0], box[1], box[2], box[3], tid))
         else:
-            # Skip YOLO inference (Saves 85% CPU power)
-            # Update tracking positions using fast template matching/optical flow centroid update
+            # Skip YOLO/Pose model and update track coordinates using centroid velocity
             updated_state = []
             for (x1, y1, x2, y2, tid) in self.last_yolo_boxes:
-                # Keep box coordinates but sync with any centroid movement if history exists
                 hist = self.track_history[tid]
                 if len(hist) >= 2:
                     dx = hist[-1][0] - hist[-2][0]
                     dy = hist[-1][1] - hist[-2][1]
-                    # Apply small motion displacement
                     new_x1 = max(0, min(w, x1 + dx))
                     new_y1 = max(0, min(h, y1 + dy))
                     new_x2 = max(0, min(w, x2 + dx))
@@ -252,7 +240,6 @@ class CampusAnalyticsEngine:
                 merged_tids.append(tid)
             self.last_yolo_boxes = updated_state
 
-        # Render Detections
         annotated = frame.copy()
         current_ids = set()
         seated, standing = 0, 0
@@ -277,16 +264,49 @@ class CampusAnalyticsEngine:
             if len(hist) >= 5:
                 vel = np.sqrt((hist[-1][0] - hist[0][0]) ** 2 + (hist[-1][1] - hist[0][1]) ** 2)
 
-            ar = bh / bw
-            if vel < 15.0 or ar < 1.7:
-                posture, col = "Seated", (255, 191, 0)
+            # ─── Posture Classifier: Use Keypoints if available, else aspect ratio + velocity ───
+            has_pose = False
+            if i < len(keypoints_list) and len(keypoints_list[i]) > 0:
+                # Classify seated vs standing using shoulder-to-hip / hip-to-knee spatial ratios
+                pts = keypoints_list[i]
+                # Keypoints index (COCO format): 5,6=shoulders, 11,12=hips, 13,14=knees
+                if len(pts) > 12:
+                    has_pose = True
+                    try:
+                        # Distance shoulders to hips vs hips to knees
+                        sh_y = (pts[5][1] + pts[6][1]) / 2
+                        hip_y = (pts[11][1] + pts[12][1]) / 2
+                        knee_y = (pts[13][1] + pts[14][1]) / 2 if len(pts) > 14 else hip_y + (hip_y - sh_y)
+                        
+                        trunk_dist = hip_y - sh_y
+                        leg_dist = knee_y - hip_y
+                        
+                        # Seated posture usually has trunk distance significantly larger than visible leg height
+                        if trunk_dist > leg_dist * 1.5 or vel < 12.0:
+                            posture = "Seated"
+                        else:
+                            posture = "Standing/Moving"
+                    except Exception:
+                        has_pose = False
+
+            if not has_pose:
+                # Fallback to aspect ratio heuristic
+                ar = bh / bw
+                if vel < 15.0 or ar < 1.7:
+                    posture = "Seated"
+                else:
+                    posture = "Standing/Moving"
+
+            if posture == "Seated":
                 seated += 1
+                col = (255, 191, 0) # Cyan/Amber
             else:
-                posture, col = "Standing/Moving", (0, 255, 127)
                 standing += 1
+                col = (0, 255, 127) # Neon Green
+
             self.track_postures[tid] = posture
 
-            # Draw vertical line crossing on LEFT
+            # Vertical Line Crossing (LEFT doorway)
             if tid not in self.active_tracks:
                 self.active_tracks[tid] = {'last_x': cx, 'state': "inside" if cx > crossing_x else "outside"}
             else:
@@ -299,7 +319,7 @@ class CampusAnalyticsEngine:
                     self._log_event(f"Exit detected (Person #{tid})")
                 self.active_tracks[tid]['last_x'] = cx
 
-            # Draw Bounding Box & Label
+            # Draw
             cv2.rectangle(annotated, (x1, y1), (x2, y2), col, 2)
             lbl = f"#{tid}|{posture}"
             (wl, _), _ = cv2.getTextSize(lbl, cv2.FONT_HERSHEY_SIMPLEX, 0.35, 1)
@@ -315,9 +335,10 @@ class CampusAnalyticsEngine:
             self._log_event("UTILITY ALERT: Lights left ON in empty room!")
 
         cv2.line(annotated, (crossing_x, 0), (crossing_x, h), (0, 0, 255), 2)
-        cv2.putText(annotated, f"Detected: {n_present} (Lag-Free Mode)", (w - 320, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+        cv2.putText(annotated, "ENTRY/EXIT", (crossing_x + 5, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
 
-        return annotated, {
+        # Telemetry payload
+        telemetry = {
             "currently_present": n_present,
             "total_unique_entries": n_unique,
             "seated_count": seated,
@@ -331,3 +352,4 @@ class CampusAnalyticsEngine:
             "last_event": self.last_event,
             "event_log": self.event_log
         }
+        return annotated, telemetry

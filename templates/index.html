@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iCloudEMS Campus Intelligence Dashboard</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --bg-color: #080b11;
+            --glass-bg: rgba(25, 30, 45, 0.45);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --primary-accent: #00E676;
+            --warning-accent: #FF5252;
+            --seated-color: #00B0FF;
+            --standing-color: #00E676;
+            --text-main: #E2E8F0;
+            --text-muted: #94A3B8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            color: var(--text-main);
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(at 10% 20%, rgba(0, 230, 118, 0.05) 0px, transparent 50%),
+                radial-gradient(at 90% 80%, rgba(0, 176, 255, 0.05) 0px, transparent 50%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        header {
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--glass-border);
+            backdrop-filter: blur(10px);
+            background: rgba(8, 11, 17, 0.6);
+            z-index: 100;
+        }
+
+        .header-title h1 {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 800;
+            font-size: 24px;
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: linear-gradient(135deg, #00E676, #00B0FF);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-title p {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .system-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            background: rgba(0, 230, 118, 0.1);
+            border: 1px solid rgba(0, 230, 118, 0.2);
+            padding: 6px 12px;
+            border-radius: 20px;
+            color: var(--primary-accent);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--primary-accent);
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); opacity: 0.5; }
+            50% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.5; }
+        }
+
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            flex-grow: 1;
+            height: calc(100vh - 73px);
+        }
+
+        /* Sidebar Control Panel */
+        .sidebar {
+            background: rgba(13, 17, 23, 0.8);
+            border-right: 1px solid var(--glass-border);
+            padding: 30px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            overflow-y: auto;
+        }
+
+        .sidebar-section h3 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .radio-option:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .radio-option.active {
+            background: rgba(0, 176, 255, 0.1);
+            border-color: rgba(0, 176, 255, 0.3);
+        }
+
+        .radio-option input {
+            display: none;
+        }
+
+        .custom-select, .custom-slider, .file-input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--glass-border);
+            padding: 10px;
+            border-radius: 8px;
+            color: var(--text-main);
+            outline: none;
+        }
+
+        .custom-select option {
+            background-color: var(--bg-color);
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .btn-apply {
+            background: linear-gradient(135deg, #00E676, #00B0FF);
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            margin-top: 15px;
+        }
+
+        .btn-apply:hover {
+            opacity: 0.9;
+        }
+
+        /* Main Workspace Grid */
+        .main-workspace {
+            display: grid;
+            grid-template-rows: 1fr 200px;
+            padding: 25px;
+            gap: 20px;
+            overflow-y: auto;
+        }
+
+        .workspace-top {
+            display: grid;
+            grid-template-columns: 2.2fr 1.2fr;
+            gap: 20px;
+            min-height: 0;
+        }
+
+        /* Glassmorphic Cards */
+        .glass-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .video-card {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+        }
+
+        .video-feed {
+            width: 100%;
+            height: 100%;
+            max-height: 520px;
+            object-fit: contain;
+            border-radius: 12px;
+        }
+
+        /* Metrics grid */
+        .metrics-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 15px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .stat-icon {
+            font-size: 20px;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 4px;
+        }
+
+        .utility-alert-box {
+            background: rgba(43, 15, 22, 0.6);
+            border: 1px solid rgba(255, 82, 82, 0.3);
+            border-radius: 12px;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #FF8A80;
+            font-weight: 600;
+            font-size: 14px;
+            display: none; /* Hidden by default */
+        }
+
+        .utility-normal-box {
+            background: rgba(15, 43, 26, 0.6);
+            border: 1px solid rgba(0, 230, 118, 0.3);
+            border-radius: 12px;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--primary-accent);
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        /* Log Panel */
+        .log-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-muted);
+        }
+
+        .log-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+            padding-right: 5px;
+        }
+
+        .log-entry {
+            padding: 6px 10px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.02);
+            border-left: 3px solid var(--primary-accent);
+            animation: slideIn 0.2s ease-out;
+        }
+
+        .log-entry.alert {
+            border-left-color: var(--warning-accent);
+            background: rgba(255, 82, 82, 0.05);
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(-10px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header Panel -->
+    <header>
+        <div class="header-title">
+            <h1><i class="fa-solid fa-brain"></i> iCloudEMS Campus Intelligence</h1>
+            <p>Decoupled High-Speed Edge Analytics & Zero-Lag Video Feed Pipeline</p>
+        </div>
+        <div class="system-status">
+            <span class="status-dot"></span>
+            <span>Live Telemetry Connected</span>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="dashboard-container">
+        
+        <!-- Sidebar Controls Panel -->
+        <aside class="sidebar">
+            <div class="sidebar-section">
+                <h3><i class="fa-solid fa-circle-play"></i> Video Source</h3>
+                <div class="control-group">
+                    <label class="radio-option active" id="lbl-synthetic">
+                        <input type="radio" name="source" value="synthetic" checked>
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Synthetic Feed
+                    </label>
+                    <label class="radio-option" id="lbl-webcam">
+                        <input type="radio" name="source" value="webcam">
+                        <i class="fa-solid fa-camera"></i> Webcam
+                    </label>
+                    <label class="radio-option" id="lbl-file">
+                        <input type="radio" name="source" value="file">
+                        <i class="fa-solid fa-file-video"></i> Upload File
+                    </label>
+                    
+                    <div id="upload-container" style="display: none;">
+                        <input type="file" id="video-uploader" class="file-input" accept="video/*">
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <h3><i class="fa-solid fa-sliders"></i> Analytics Config</h3>
+                <div class="control-group">
+                    <div>
+                        <span class="slider-label">
+                            <span>YOLO Model Preset</span>
+                        </span>
+                        <select class="custom-select" id="model-select">
+                            <option value="yolov8s.pt">yolov8s (Fast + Accurate)</option>
+                            <option value="yolov8n.pt">yolov8n (Ultra Fast)</option>
+                            <option value="yolov8m.pt">yolov8m (Maximum Accuracy)</option>
+                            <option value="yolo11s.pt">yolo11s (Next-Gen Small)</option>
+                            <option value="yolo11n.pt">yolo11n (Next-Gen Fast)</option>
+                            <option value="yolo11n-pose.pt">yolo11n-pose (Pose Estimation)</option>
+                            <option value="rtdetr-l.pt">rtdetr-l (Transformer - High Accuracy)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <span class="slider-label">
+                            <span>Confidence Threshold</span>
+                            <span id="conf-val">0.10</span>
+                        </span>
+                        <input type="range" class="custom-slider" id="conf-slider" min="0.05" max="0.80" step="0.05" value="0.10">
+                    </div>
+
+                    <div>
+                        <span class="slider-label">
+                            <span>Inference Resolution</span>
+                        </span>
+                        <select class="custom-select" id="res-select">
+                            <option value="640">640px (Standard / Smooth)</option>
+                            <option value="1024">1024px (High-Res / Details)</option>
+                            <option value="1280">1280px (Ultra-Res / Max Range)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <span class="slider-label">
+                            <span>Line Position (Left door)</span>
+                            <span id="line-val">15%</span>
+                        </span>
+                        <input type="range" class="custom-slider" id="line-slider" min="0.05" max="0.50" step="0.05" value="0.15">
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn-apply" id="btn-apply-settings">
+                <i class="fa-solid fa-circle-check"></i> Apply Config
+            </button>
+        </aside>
+
+        <!-- Main Workspace -->
+        <main class="main-workspace">
+            
+            <div class="workspace-top">
+                <!-- Video Stream Card -->
+                <div class="glass-card video-card">
+                    <img id="mjpeg-stream" class="video-feed" src="/video_feed" alt="Campus CCTV Video Stream">
+                </div>
+
+                <!-- Telemetry Metrics Card -->
+                <div class="metrics-panel">
+                    <div class="glass-card" style="flex-grow: 1;">
+                        <div class="metrics-grid">
+                            <div class="stat-card" style="border-color: rgba(0, 230, 118, 0.2);">
+                                <span class="stat-icon" style="color: var(--primary-accent);"><i class="fa-solid fa-users"></i></span>
+                                <span class="stat-value" id="val-present" style="color: var(--primary-accent);">0</span>
+                                <span class="stat-label">Currently Present</span>
+                            </div>
+                            <div class="stat-card" style="border-color: rgba(0, 176, 255, 0.2);">
+                                <span class="stat-icon" style="color: var(--seated-color);"><i class="fa-solid fa-door-open"></i></span>
+                                <span class="stat-value" id="val-entries" style="color: var(--seated-color);">0</span>
+                                <span class="stat-label">Unique Entries</span>
+                            </div>
+                            <div class="stat-card">
+                                <span class="stat-icon" style="color: var(--seated-color);"><i class="fa-solid fa-chair"></i></span>
+                                <span class="stat-value" id="val-seated" style="color: var(--seated-color);">0</span>
+                                <span class="stat-label">Seated Students</span>
+                            </div>
+                            <div class="stat-card">
+                                <span class="stat-icon" style="color: var(--standing-color);"><i class="fa-solid fa-person-walking"></i></span>
+                                <span class="stat-value" id="val-standing" style="color: var(--standing-color);">0</span>
+                                <span class="stat-label">Standing/Moving</span>
+                            </div>
+                            <div class="stat-card">
+                                <span class="stat-icon"><i class="fa-solid fa-camera-retro"></i></span>
+                                <span class="stat-value" id="val-quality" style="font-size: 16px; font-weight: 600;">Clear</span>
+                                <span class="stat-label">Frame Quality</span>
+                            </div>
+                            <div class="stat-card">
+                                <span class="stat-icon"><i class="fa-solid fa-wave-square"></i></span>
+                                <span class="stat-value" id="val-motion" style="font-size: 16px; font-weight: 600;">No motion</span>
+                                <span class="stat-label">Motion Status</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Wasted Utility Banners -->
+                    <div class="utility-normal-box" id="banner-utility-ok">
+                        <i class="fa-solid fa-circle-check"></i>
+                        <span>Utility Usage: Normal (No energy waste detected)</span>
+                    </div>
+                    <div class="utility-alert-box" id="banner-utility-alert">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span>WASTED UTILITY: Lights ON in Empty Room!</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activity Log Card -->
+            <div class="glass-card">
+                <div class="log-title">
+                    <i class="fa-solid fa-list-check"></i> Real-Time Activity Log
+                </div>
+                <div class="log-container" id="log-list">
+                    <div class="log-entry">System ready. Waiting for live telemetry...</div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Javascript Dashboard Logic -->
+    <script>
+        // DOM Elements
+        const confSlider = document.getElementById('conf-slider');
+        const confVal = document.getElementById('conf-val');
+        const lineSlider = document.getElementById('line-slider');
+        const lineVal = document.getElementById('line-val');
+        const sourceRadios = document.querySelectorAll('input[name="source"]');
+        const uploadContainer = document.getElementById('upload-container');
+        const videoUploader = document.getElementById('video-uploader');
+        const btnApply = document.getElementById('btn-apply-settings');
+        
+        // Metrics DOM
+        const valPresent = document.getElementById('val-present');
+        const valEntries = document.getElementById('val-entries');
+        const valSeated = document.getElementById('val-seated');
+        const valStanding = document.getElementById('val-standing');
+        const valQuality = document.getElementById('val-quality');
+        const valMotion = document.getElementById('val-motion');
+        const bannerUtilityOk = document.getElementById('banner-utility-ok');
+        const bannerUtilityAlert = document.getElementById('banner-utility-alert');
+        const logList = document.getElementById('log-list');
+
+        // Dynamic slider labels
+        confSlider.addEventListener('input', () => { confVal.textContent = confSlider.value; });
+        lineSlider.addEventListener('input', () => { lineVal.textContent = Math.round(lineSlider.value * 100) + '%'; });
+
+        // Handle source change toggles
+        sourceRadios.forEach(radio => {
+            radio.addEventListener('change', () => {
+                document.querySelectorAll('.radio-option').forEach(opt => opt.classList.remove('active'));
+                document.getElementById(`lbl-${radio.value}`).classList.add('active');
+                
+                if (radio.value === 'file') {
+                    uploadContainer.style.display = 'block';
+                } else {
+                    uploadContainer.style.display = 'none';
+                }
+            });
+        });
+
+        // Apply settings API handler
+        btnApply.addEventListener('click', async () => {
+            const formData = new FormData();
+            const source = document.querySelector('input[name="source"]:checked').value;
+            
+            formData.append('model', document.getElementById('model-select').value);
+            formData.append('conf', confSlider.value);
+            formData.append('resolution', document.getElementById('res-select').value);
+            formData.append('line_pos', lineSlider.value);
+            formData.append('source', source);
+
+            btnApply.disabled = true;
+            btnApply.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Applying...';
+
+            try {
+                const res = await fetch('/api/update_settings', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                console.log("Settings Updated:", data);
+            } catch (e) {
+                console.error("Error updating settings:", e);
+            } finally {
+                btnApply.disabled = false;
+                btnApply.innerHTML = '<i class="fa-solid fa-circle-check"></i> Apply Config';
+                // Refresh MJPEG stream feed
+                document.getElementById('mjpeg-stream').src = `/video_feed?t=${Date.now()}`;
+            }
+        });
+
+        // File upload handler
+        videoUploader.addEventListener('change', async () => {
+            if (videoUploader.files.length === 0) return;
+            const file = videoUploader.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const statusLabel = document.createElement('div');
+            statusLabel.style.fontSize = '12px';
+            statusLabel.style.color = 'var(--seated-color)';
+            statusLabel.style.marginTop = '4px';
+            statusLabel.textContent = 'Uploading video file...';
+            uploadContainer.appendChild(statusLabel);
+
+            try {
+                const res = await fetch('/api/upload_video', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                statusLabel.style.color = 'var(--primary-accent)';
+                statusLabel.textContent = 'Upload complete! Processing...';
+                setTimeout(() => statusLabel.remove(), 2000);
+                
+                // Refresh feed
+                document.getElementById('mjpeg-stream').src = `/video_feed?t=${Date.now()}`;
+            } catch (e) {
+                console.error("Upload error:", e);
+                statusLabel.style.color = 'var(--warning-accent)';
+                statusLabel.textContent = 'Upload failed!';
+            }
+        });
+
+        // Initialize active config on page load
+        async function fetchConfig() {
+            try {
+                const res = await fetch('/api/config');
+                const cfg = await res.json();
+                document.getElementById('model-select').value = cfg.model;
+                confSlider.value = cfg.conf;
+                confVal.textContent = cfg.conf;
+                document.getElementById('res-select').value = cfg.resolution;
+                lineSlider.value = cfg.line_pos;
+                lineVal.textContent = Math.round(cfg.line_pos * 100) + '%';
+                
+                // Active source button select
+                document.querySelectorAll('.radio-option').forEach(opt => opt.classList.remove('active'));
+                document.querySelector(`input[name="source"][value="${cfg.source}"]`).checked = true;
+                document.getElementById(`lbl-${cfg.source}`).classList.add('active');
+                if (cfg.source === 'file') {
+                    uploadContainer.style.display = 'block';
+                }
+            } catch(e) {}
+        }
+        fetchConfig();
+
+        // WebSocket telemetry receiver
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUri = `${protocol}//${window.location.host}/ws/telemetry`;
+        let socket = new WebSocket(wsUri);
+
+        socket.onmessage = function(event) {
+            const telemetry = JSON.parse(event.data);
+            
+            // Update stats
+            valPresent.textContent = telemetry.currently_present;
+            valEntries.textContent = telemetry.total_unique_entries;
+            valSeated.textContent = telemetry.seated_count;
+            valStanding.textContent = telemetry.standing_count;
+            
+            // Frame Quality
+            valQuality.textContent = telemetry.blur_status;
+            if (telemetry.blur_status !== "Clear") {
+                valQuality.style.color = 'var(--warning-accent)';
+            } else {
+                valQuality.style.color = 'var(--primary-accent)';
+            }
+
+            // Motion Status
+            valMotion.textContent = telemetry.motion_status;
+            if (telemetry.motion_status === "Motion detected") {
+                valMotion.style.color = 'var(--primary-accent)';
+            } else {
+                valMotion.style.color = 'var(--text-muted)';
+            }
+
+            // Wasted Utility Alert
+            if (telemetry.wasted_utility_alert) {
+                bannerUtilityOk.style.display = 'none';
+                bannerUtilityAlert.style.display = 'flex';
+            } else {
+                bannerUtilityOk.style.display = 'flex';
+                bannerUtilityAlert.style.display = 'none';
+            }
+
+            // Update Log list
+            if (telemetry.event_log && telemetry.event_log.length > 0) {
+                logList.innerHTML = '';
+                telemetry.event_log.forEach(item => {
+                    const el = document.createElement('div');
+                    el.className = 'log-entry';
+                    if (item.includes('ALERT') || item.includes('Exit')) {
+                        el.className = 'log-entry alert';
+                    }
+                    el.textContent = item;
+                    logList.appendChild(el);
+                });
+            }
+        };
+
+        socket.onclose = function() {
+            console.log("WebSocket telemetry connection closed. Reconnecting...");
+            setTimeout(() => {
+                socket = new WebSocket(wsUri);
+            }, 3000);
+        };
+    </script>
+</body>
+</html>
